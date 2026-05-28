@@ -1,99 +1,131 @@
 import 'dart:io';
-import 'package:flutter/services.dart';
-import 'package:tflite_flutter/tflite_flutter.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import '../models/detection_result.dart';
 import '../../core/constants/app_constants.dart';
 
+/// Uses Claude Vision API (claude-haiku) to analyze medical images.
+/// No native libraries required — works on macOS, iOS, Android, web.
 class MLService {
-  final Map<String, Interpreter> _interpreters = {};
+  // Replace with your Anthropic API key, or set via env/config
+  static const _apiKey = String.fromEnvironment(
+    'ANTHROPIC_API_KEY',
+    defaultValue: '',
+  );
 
-  Future<void> loadModel(String cancerType) async {
-    if (_interpreters.containsKey(cancerType)) return;
-
-    final modelFile = AppConstants.modelFiles[cancerType]!;
-
-    // Try multiple asset path formats - different tflite_flutter versions
-    // and platforms resolve asset paths differently
-    final pathsToTry = [
-      'models/$modelFile',
-      modelFile,
-      'assets/models/$modelFile',
-    ];
-
-    Exception? lastError;
-    for (final path in pathsToTry) {
-      try {
-        print('[MLService] Trying asset path: $path');
-        final interpreter = await Interpreter.fromAsset(path);
-        _interpreters[cancerType] = interpreter;
-        print('[MLService] ✔ Loaded model: $path');
-        return;
-      } catch (e) {
-        print('[MLService] ✗ Failed ($path): $e');
-        lastError = Exception('$e');
-      }
-    }
-
-    // Also try loading from file path directly (bypasses asset system)
-    try {
-      final byteData = await rootBundle.load('assets/models/$modelFile');
-      print('[MLService] Asset bundle loaded ${byteData.lengthInBytes} bytes');
-      if (byteData.lengthInBytes < 10000) {
-        throw Exception(
-            'Model file too small (${byteData.lengthInBytes} bytes) - likely a stub');
-      }
-      final interpreter =
-          Interpreter.fromBuffer(byteData.buffer.asUint8List());
-      _interpreters[cancerType] = interpreter;
-      print('[MLService] ✔ Loaded via rootBundle buffer');
-      return;
-    } catch (e) {
-      print('[MLService] ✗ rootBundle failed: $e');
-    }
-
-    throw lastError ?? Exception('All load attempts failed for $cancerType');
-  }
+  static const _apiUrl = 'https://api.anthropic.com/v1/messages';
 
   Future<DetectionResult> predict({
     required String cancerType,
     required File imageFile,
   }) async {
+    if (_apiKey.isEmpty) {
+      print('[MLService] No API key — using mock mode');
+      return _mockResult(cancerType, imageFile.path);
+    }
+
     try {
-      await loadModel(cancerType);
-      print('[MLService] Running real inference for $cancerType');
-      return await _runInference(cancerType, imageFile);
+      return await _claudeInference(cancerType, imageFile);
     } catch (e) {
-      print('[MLService] Falling back to mock: $e');
+      print('[MLService] Claude API error: $e — falling back to mock');
       return _mockResult(cancerType, imageFile.path);
     }
   }
 
-  Future<DetectionResult> _runInference(
+  Future<DetectionResult> _claudeInference(
       String cancerType, File imageFile) async {
-    final interpreter = _interpreters[cancerType]!;
-    final inputSize = AppConstants.inputSizes[cancerType]!;
     final labels = AppConstants.labels[cancerType]!;
+    final cancerName = AppConstants.cancerNames[cancerType]!;
 
-    final inputTensor = _preprocessImage(imageFile, inputSize);
+    // Resize image to reduce payload size
+    final bytes = imageFile.readAsBytesSync();
+    final decoded = img.decodeImage(bytes)!;
+    final resized = img.copyResize(decoded, width: 512);
+    final jpegBytes = img.encodeJpg(resized, quality: 85);
+    final base64Image = base64Encode(jpegBytes);
 
-    final outputShape = interpreter.getOutputTensor(0).shape;
-    print('[MLService] Output shape: $outputShape');
-    final outputBuffer = List.generate(
-      outputShape[0],
-      (_) => List.filled(outputShape[1], 0.0),
+    final prompt = '''
+You are a medical AI assistant analyzing a medical image for $cancerName detection.
+
+Analyze this image and classify it into one of these categories:
+${labels.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n')}
+
+Respond with ONLY a valid JSON object in this exact format, no other text:
+{
+  "top_label": "<one of the exact category names above>",
+  "confidences": {
+    ${labels.map((l) => '"$l": <float 0.0-1.0>').join(',\n    ')}
+  },
+  "reasoning": "<1-2 sentence clinical reasoning>"
+}
+
+All confidence values must sum to approximately 1.0.''';
+
+    final response = await http.post(
+      Uri.parse(_apiUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': _apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: jsonEncode({
+        'model': 'claude-haiku-4-5-20251001',
+        'max_tokens': 512,
+        'messages': [
+          {
+            'role': 'user',
+            'content': [
+              {
+                'type': 'image',
+                'source': {
+                  'type': 'base64',
+                  'media_type': 'image/jpeg',
+                  'data': base64Image,
+                },
+              },
+              {'type': 'text', 'text': prompt},
+            ],
+          }
+        ],
+      }),
     );
 
-    interpreter.run(inputTensor, outputBuffer);
-
-    final confidences = <String, double>{};
-    final rawOutput = outputBuffer[0];
-    for (int i = 0; i < labels.length && i < rawOutput.length; i++) {
-      confidences[labels[i]] = rawOutput[i];
+    if (response.statusCode != 200) {
+      throw Exception('API error ${response.statusCode}: ${response.body}');
     }
 
-    print('[MLService] Inference done: $confidences');
-    return _buildResult(cancerType, imageFile.path, confidences);
+    final data = jsonDecode(response.body);
+    final text = data['content'][0]['text'] as String;
+    print('[MLService] Claude response: $text');
+
+    // Parse JSON response
+    final jsonStart = text.indexOf('{');
+    final jsonEnd = text.lastIndexOf('}') + 1;
+    final jsonStr = text.substring(jsonStart, jsonEnd);
+    final result = jsonDecode(jsonStr);
+
+    final topLabel = result['top_label'] as String;
+    final confidencesRaw = result['confidences'] as Map<String, dynamic>;
+    final confidences = confidencesRaw
+        .map((k, v) => MapEntry(k, (v as num).toDouble()));
+    final reasoning = result['reasoning'] as String? ?? '';
+
+    final topConfidence = confidences[topLabel] ?? 0.5;
+    final riskLevel = _getRiskLevel(cancerType, topLabel, topConfidence);
+
+    return DetectionResult(
+      cancerType: cancerType,
+      imagePath: imageFile.path,
+      topLabel: topLabel,
+      topConfidence: topConfidence,
+      allConfidences: confidences,
+      timestamp: DateTime.now(),
+      isHighRisk: riskLevel == 'high',
+      riskLevel: riskLevel,
+      recommendation:
+          '$reasoning ${_getRecommendation(riskLevel, topLabel)}',
+    );
   }
 
   DetectionResult _mockResult(String cancerType, String imagePath) {
@@ -115,9 +147,8 @@ class MLService {
         confidences.entries.reduce((a, b) => a.value > b.value ? a : b);
     final riskLevel = _getRiskLevel(cancerType, topEntry.key, topEntry.value);
     final recommendation = isMock
-        ? '⚠️ Demo mode — ML model not yet downloaded. Run scripts/download_models.py to enable real inference. ${_getRecommendation(riskLevel, topEntry.key)}'
+        ? '⚠️ Demo mode — Set ANTHROPIC_API_KEY to enable real AI inference. ${_getRecommendation(riskLevel, topEntry.key)}'
         : _getRecommendation(riskLevel, topEntry.key);
-
     return DetectionResult(
       cancerType: cancerType,
       imagePath: imagePath,
@@ -129,24 +160,6 @@ class MLService {
       riskLevel: riskLevel,
       recommendation: recommendation,
     );
-  }
-
-  List<List<List<List<double>>>> _preprocessImage(File imageFile, int size) {
-    final bytes = imageFile.readAsBytesSync();
-    final rawImage = img.decodeImage(bytes)!;
-    final resized = img.copyResize(rawImage, width: size, height: size);
-    return [
-      List.generate(
-        size,
-        (y) => List.generate(
-          size,
-          (x) {
-            final pixel = resized.getPixel(x, y);
-            return [pixel.r / 255.0, pixel.g / 255.0, pixel.b / 255.0];
-          },
-        ),
-      ),
-    ];
   }
 
   String _getRiskLevel(String cancerType, String label, double confidence) {
@@ -173,10 +186,5 @@ class MLService {
     }
   }
 
-  void dispose() {
-    for (final interp in _interpreters.values) {
-      interp.close();
-    }
-    _interpreters.clear();
-  }
+  void dispose() {}
 }
