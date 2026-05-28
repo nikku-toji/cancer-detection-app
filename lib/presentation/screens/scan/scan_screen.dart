@@ -9,6 +9,13 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../providers/scan_provider.dart';
 
+const _cancerGradients = {
+  'skin': [Color(0xFF6D4C41), Color(0xFFBCAAA4)],
+  'lung': [Color(0xFF1565C0), Color(0xFF42A5F5)],
+  'breast': [Color(0xFFAD1457), Color(0xFFF48FB1)],
+  'brain': [Color(0xFF4527A0), Color(0xFF9575CD)],
+};
+
 class ScanScreen extends ConsumerStatefulWidget {
   final String cancerType;
   const ScanScreen({super.key, required this.cancerType});
@@ -21,47 +28,25 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   File? _selectedImage;
   final _picker = ImagePicker();
 
-  // Detect if we're on desktop (macOS/Windows/Linux)
   bool get _isDesktop =>
-      !kIsWeb &&
-      (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+      !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
 
-  /// Pick image: use file_selector on desktop, image_picker on mobile
   Future<void> _pickImage([ImageSource source = ImageSource.gallery]) async {
     if (_isDesktop) {
-      await _pickImageDesktop();
+      final file = await openFile(acceptedTypeGroups: [
+        const XTypeGroup(label: 'Images', extensions: ['jpg', 'jpeg', 'png', 'bmp', 'tiff'])
+      ]);
+      if (file != null) setState(() => _selectedImage = File(file.path));
     } else {
-      await _pickImageMobile(source);
-    }
-  }
-
-  Future<void> _pickImageDesktop() async {
-    const typeGroup = XTypeGroup(
-      label: 'Images',
-      extensions: ['jpg', 'jpeg', 'png', 'bmp', 'tiff'],
-    );
-    final file = await openFile(acceptedTypeGroups: [typeGroup]);
-    if (file != null) {
-      setState(() => _selectedImage = File(file.path));
-    }
-  }
-
-  Future<void> _pickImageMobile(ImageSource source) async {
-    final picked = await _picker.pickImage(
-      source: source,
-      imageQuality: 95,
-    );
-    if (picked != null) {
-      setState(() => _selectedImage = File(picked.path));
+      final picked = await _picker.pickImage(source: source, imageQuality: 95);
+      if (picked != null) setState(() => _selectedImage = File(picked.path));
     }
   }
 
   Future<void> _runAnalysis() async {
     if (_selectedImage == null) return;
     await ref.read(scanProvider.notifier).analyze(
-          cancerType: widget.cancerType,
-          imageFile: _selectedImage!,
-        );
+          cancerType: widget.cancerType, imageFile: _selectedImage!);
     final state = ref.read(scanProvider);
     if (state.scanState == ScanState.success && state.result != null) {
       if (mounted) context.push('/result', extra: state.result);
@@ -72,133 +57,250 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   Widget build(BuildContext context) {
     final scanState = ref.watch(scanProvider);
     final isLoading = scanState.scanState == ScanState.loading;
+    final gradColors = _cancerGradients[widget.cancerType]!;
     final cancerName = AppConstants.cancerNames[widget.cancerType]!;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Scan: $cancerName')),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Image preview area
-            Expanded(
-              child: GestureDetector(
-                onTap: isLoading ? null : () => _pickImage(),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(20),
-                    border:
-                        Border.all(color: Colors.grey[300]!, width: 2),
+      backgroundColor: const Color(0xFFF0F4FF),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            pinned: true,
+            expandedHeight: 120,
+            backgroundColor: gradColors[0],
+            flexibleSpace: FlexibleSpaceBar(
+              title: Text('Scan: $cancerName',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              background: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: gradColors,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  child: _selectedImage != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(18),
-                          child: Image.file(
-                            _selectedImage!,
-                            fit: BoxFit.contain,
-                          ),
-                        )
-                      : Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.add_photo_alternate_outlined,
-                              size: 72,
-                              color: Colors.grey[400],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _isDesktop
-                                  ? 'Click to browse image file'
-                                  : 'Tap to select image',
-                              style: TextStyle(
-                                  color: Colors.grey[500], fontSize: 16),
-                            ),
-                            const SizedBox(height: 8),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 32),
-                              child: Text(
-                                AppConstants
-                                    .cancerDescriptions[widget.cancerType]!,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    color: Colors.grey[400], fontSize: 12),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ).animate().fadeIn(),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-
-            // Action buttons — camera only shown on mobile
-            if (!_isDesktop)
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: isLoading
-                          ? null
-                          : () => _pickImage(ImageSource.camera),
-                      icon: const Icon(Icons.camera_alt),
-                      label: const Text('Camera'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: isLoading
-                          ? null
-                          : () => _pickImage(ImageSource.gallery),
-                      icon: const Icon(Icons.photo_library),
-                      label: const Text('Gallery'),
-                    ),
-                  ),
-                ],
-              ),
-
-            if (_isDesktop)
-              OutlinedButton.icon(
-                onPressed: isLoading ? null : () => _pickImage(),
-                icon: const Icon(Icons.folder_open),
-                label: const Text('Browse Image File'),
-              ),
-
-            const SizedBox(height: 12),
-
-            // Analyze button
-            FilledButton.icon(
-              onPressed:
-                  (_selectedImage != null && !isLoading) ? _runAnalysis : null,
-              icon: isLoading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white),
+              onPressed: () => context.pop(),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                // Image drop zone
+                GestureDetector(
+                  onTap: isLoading ? null : () => _pickImage(),
+                  child: AnimatedContainer(
+                    duration: 300.ms,
+                    height: 280,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: _selectedImage != null
+                            ? gradColors[0].withOpacity(0.5)
+                            : Colors.grey.shade200,
+                        width: 2,
                       ),
-                    )
-                  : const Icon(Icons.search),
-              label: Text(isLoading ? 'Analyzing...' : 'Analyze Image'),
-            ),
-
-            if (scanState.errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  scanState.errorMessage!,
-                  style: const TextStyle(color: Colors.red),
-                  textAlign: TextAlign.center,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.06),
+                          blurRadius: 20,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: _selectedImage != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(22),
+                            child: Image.file(_selectedImage!, fit: BoxFit.cover),
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(colors: [
+                                    gradColors[0].withOpacity(0.1),
+                                    gradColors[1].withOpacity(0.1),
+                                  ]),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(Icons.add_photo_alternate_outlined,
+                                    size: 52, color: gradColors[0]),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _isDesktop ? 'Click to browse image' : 'Tap to select image',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF37474F)),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'JPG, PNG, BMP supported',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                              ),
+                            ],
+                          ).animate().fadeIn(),
+                  ),
                 ),
-              ),
-          ],
+                const SizedBox(height: 16),
+
+                // Tips card
+                if (_selectedImage == null)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: gradColors[0].withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: gradColors[0].withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.lightbulb_outline, color: gradColors[0], size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            AppConstants.cancerDescriptions[widget.cancerType]!,
+                            style: TextStyle(color: gradColors[0], fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ).animate().fadeIn(delay: 200.ms),
+
+                const SizedBox(height: 16),
+
+                // Action buttons
+                if (!_isDesktop)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ActionButton(
+                          icon: Icons.camera_alt_rounded,
+                          label: 'Camera',
+                          color: gradColors[0],
+                          onTap: isLoading ? null : () => _pickImage(ImageSource.camera),
+                          outlined: true,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _ActionButton(
+                          icon: Icons.photo_library_rounded,
+                          label: 'Gallery',
+                          color: gradColors[0],
+                          onTap: isLoading ? null : () => _pickImage(ImageSource.gallery),
+                          outlined: true,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  _ActionButton(
+                    icon: Icons.folder_open_rounded,
+                    label: 'Browse Image File',
+                    color: gradColors[0],
+                    onTap: isLoading ? null : () => _pickImage(),
+                    outlined: true,
+                    fullWidth: true,
+                  ),
+
+                const SizedBox(height: 12),
+
+                // Analyze button
+                AnimatedContainer(
+                  duration: 200.ms,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: _selectedImage != null && !isLoading
+                        ? LinearGradient(colors: gradColors)
+                        : null,
+                    color: _selectedImage == null || isLoading ? Colors.grey.shade300 : null,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: _selectedImage != null && !isLoading
+                        ? [BoxShadow(color: gradColors[0].withOpacity(0.4), blurRadius: 16, offset: const Offset(0, 6))]
+                        : null,
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: (_selectedImage != null && !isLoading) ? _runAnalysis : null,
+                      child: Center(
+                        child: isLoading
+                            ? Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const SizedBox(width: 20, height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+                                  const SizedBox(width: 12),
+                                  Text('Analyzing...', style: TextStyle(
+                                      color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                                ],
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.search_rounded,
+                                      color: _selectedImage != null ? Colors.white : Colors.grey.shade500),
+                                  const SizedBox(width: 8),
+                                  Text('Analyze Image',
+                                      style: TextStyle(
+                                        color: _selectedImage != null ? Colors.white : Colors.grey.shade500,
+                                        fontWeight: FontWeight.bold, fontSize: 16)),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                if (scanState.errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(scanState.errorMessage!,
+                        style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+                  ),
+                const SizedBox(height: 32),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+  final bool outlined;
+  final bool fullWidth;
+
+  const _ActionButton({
+    required this.icon, required this.label, required this.color,
+    this.onTap, this.outlined = false, this.fullWidth = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: fullWidth ? double.infinity : null,
+      height: 50,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side: BorderSide(color: color.withOpacity(0.4)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       ),
     );

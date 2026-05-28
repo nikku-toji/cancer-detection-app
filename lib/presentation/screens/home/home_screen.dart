@@ -11,55 +11,129 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cancer Detection AI'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history),
-            onPressed: () => context.push('/history'),
-            tooltip: 'Scan History',
+      backgroundColor: const Color(0xFFF0F4FF),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 180,
+            floating: false,
+            pinned: true,
+            backgroundColor: const Color(0xFF1565C0),
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF0D47A1), Color(0xFF1976D2), Color(0xFF00ACC1)],
+                  ),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(Icons.biotech_rounded, color: Colors.white, size: 28),
+                            ),
+                            const SizedBox(width: 12),
+                            const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Cancer Detection AI',
+                                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                                Text('Powered by Machine Learning',
+                                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+                              ],
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.history, color: Colors.white),
+                              onPressed: () => context.push('/history'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.shield_outlined, color: Colors.white70, size: 14),
+                              SizedBox(width: 6),
+                              Text('Educational purposes only · Not medical advice',
+                                  style: TextStyle(color: Colors.white70, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 4, height: 22,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1565C0),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text('Select Cancer Type',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1A237E))),
+                    ],
+                  ).animate().fadeIn().slideX(begin: -0.2),
+                  const SizedBox(height: 4),
+                  const Padding(
+                    padding: EdgeInsets.only(left: 14),
+                    child: Text('Upload a medical image to begin analysis',
+                        style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  ).animate().fadeIn(delay: 100.ms),
+                ],
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+                childAspectRatio: 0.82,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => CancerTypeCard(
+                  cancerType: AppConstants.cancerTypes[index],
+                  index: index,
+                ),
+                childCount: AppConstants.cancerTypes.length,
+              ),
+            ),
           ),
         ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const DisclaimerBanner(),
-            const SizedBox(height: 20),
-            Text(
-              'Select Cancer Type',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ).animate().fadeIn().slideX(begin: -0.2),
-            const SizedBox(height: 8),
-            Text(
-              'Upload a medical image to analyze for potential cancer indicators.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[600],
-                  ),
-            ).animate().fadeIn(delay: 100.ms),
-            const SizedBox(height: 20),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 0.88,
-              children: AppConstants.cancerTypes
-                  .asMap()
-                  .entries
-                  .map((e) => CancerTypeCard(
-                        cancerType: e.value,
-                        index: e.key,
-                      ))
-                  .toList(),
-            ),
-          ],
-        ),
       ),
     );
   }
