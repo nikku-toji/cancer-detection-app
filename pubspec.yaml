@@ -24,8 +24,8 @@ dependencies:
   image: ^4.1.7
   cached_network_image: ^3.3.1
 
-  # Removed tflite_flutter - has unsolved macOS dylib issue
-  # Using Claude Vision API for inference instead (works everywhere)
+  # ML - TFLite (requires libtensorflowlite_c-mac.dylib in app Resources/)
+  tflite_flutter: ^0.11.0
 
   # State management
   flutter_riverpod: ^2.5.1
