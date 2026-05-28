@@ -19,7 +19,6 @@ An AI-powered Flutter mobile application for multi-type cancer detection using o
 - **Confidence scores** with visual probability charts
 - **History tracking** of past scans
 - **Educational content** about each cancer type
-- **Nearby hospitals** finder
 - **Export reports** as PDF
 
 ## 🏗️ Architecture
@@ -43,44 +42,81 @@ cancer_detection_app/
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Flutter SDK >= 3.0.0
-- Dart >= 3.0.0
+- Flutter SDK >= 3.0.0 — install via `brew install --cask flutter`
+- Dart >= 3.0.0 (bundled with Flutter)
 - Android Studio / Xcode
-- Python 3.9+ (for model scripts)
+- Python 3.9+
 
-### Installation
+### 1. Install Flutter (macOS)
 
 ```bash
-# Clone the repo
-git clone https://github.com/nikku-toji/cancer-detection-app.git
-cd cancer-detection-app
-
-# Install Flutter dependencies
-flutter pub get
-
-# Download ML models (run the Python script)
-cd scripts
-pip install -r requirements.txt
-python download_models.py
-
-# Run the app
-flutter run
+brew install --cask flutter
+flutter doctor   # follow any remaining setup steps
 ```
 
-### Backend (Optional)
+### 2. Clone & install Flutter deps
+
+```bash
+git clone https://github.com/nikku-toji/cancer-detection-app.git
+cd cancer-detection-app
+flutter pub get
+```
+
+### 3. Download ML models
+
+> **macOS / Homebrew Python users:** Python is externally managed — use a venv.
+
+```bash
+cd scripts
+
+# Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate       # run this every new terminal session
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Download / generate models
+python download_models.py
+
+cd ..
+```
+
+### 4. Run the app
+
+```bash
+flutter run                    # picks up connected device / simulator
+flutter run -d chrome          # web preview
+```
+
+### Backend (Optional — cloud inference fallback)
+
 ```bash
 cd backend
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn main:app --reload --port 8000
 ```
 
 ## 📊 Datasets Used
 
-- **HAM10000** - Human Against Machine with 10000 training images (skin lesions)
-- **ISIC Archive** - International Skin Imaging Collaboration
-- **Kaggle Chest CT** - Lung cancer CT scan dataset
-- **CBIS-DDSM** - Curated Breast Imaging Subset of DDSM
-- **Kaggle Brain MRI** - Brain tumor classification MRI dataset
+- **HAM10000** — 10,015 dermoscopic skin lesion images (7 classes)
+- **ISIC Archive** — International Skin Imaging Collaboration
+- **Kaggle Chest CT** — Lung cancer CT scan dataset
+- **CBIS-DDSM** — Curated Breast Imaging Subset of DDSM
+- **Kaggle Brain MRI** — Brain tumor classification MRI dataset
+
+## 🧠 Models
+
+| Cancer | Architecture | Input | Classes | Source |
+|---|---|---|---|---|
+| Skin | MobileNetV2 | 224×224 RGB | 7 | HAM10000 |
+| Lung | EfficientNetB0 | 224×224 RGB | 4 | Kaggle CT |
+| Breast | ResNet50 | 224×224 RGB | 3 | CBIS-DDSM |
+| Brain | Custom CNN | 224×224 RGB | 4 | Kaggle MRI |
+
+Models are excluded from git (too large). Run `scripts/download_models.py` to fetch/generate them.
 
 ## ⚠️ Medical Disclaimer
 
