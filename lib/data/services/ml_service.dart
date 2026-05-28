@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:image/image.dart' as img;
@@ -11,14 +10,49 @@ class MLService {
 
   Future<void> loadModel(String cancerType) async {
     if (_interpreters.containsKey(cancerType)) return;
-    try {
-      final modelFile = AppConstants.modelFiles[cancerType]!;
-      final interpreter = await Interpreter.fromAsset('models/$modelFile');
-      _interpreters[cancerType] = interpreter;
-    } catch (e) {
-      // Model file not found — will use mock inference below
-      throw Exception('Model not loaded for $cancerType: $e');
+
+    final modelFile = AppConstants.modelFiles[cancerType]!;
+
+    // Try multiple asset path formats - different tflite_flutter versions
+    // and platforms resolve asset paths differently
+    final pathsToTry = [
+      'models/$modelFile',
+      modelFile,
+      'assets/models/$modelFile',
+    ];
+
+    Exception? lastError;
+    for (final path in pathsToTry) {
+      try {
+        print('[MLService] Trying asset path: $path');
+        final interpreter = await Interpreter.fromAsset(path);
+        _interpreters[cancerType] = interpreter;
+        print('[MLService] ✔ Loaded model: $path');
+        return;
+      } catch (e) {
+        print('[MLService] ✗ Failed ($path): $e');
+        lastError = Exception('$e');
+      }
     }
+
+    // Also try loading from file path directly (bypasses asset system)
+    try {
+      final byteData = await rootBundle.load('assets/models/$modelFile');
+      print('[MLService] Asset bundle loaded ${byteData.lengthInBytes} bytes');
+      if (byteData.lengthInBytes < 10000) {
+        throw Exception(
+            'Model file too small (${byteData.lengthInBytes} bytes) - likely a stub');
+      }
+      final interpreter =
+          Interpreter.fromBuffer(byteData.buffer.asUint8List());
+      _interpreters[cancerType] = interpreter;
+      print('[MLService] ✔ Loaded via rootBundle buffer');
+      return;
+    } catch (e) {
+      print('[MLService] ✗ rootBundle failed: $e');
+    }
+
+    throw lastError ?? Exception('All load attempts failed for $cancerType');
   }
 
   Future<DetectionResult> predict({
@@ -27,10 +61,10 @@ class MLService {
   }) async {
     try {
       await loadModel(cancerType);
+      print('[MLService] Running real inference for $cancerType');
       return await _runInference(cancerType, imageFile);
     } catch (e) {
-      // Model not available yet (not downloaded) — return mock result
-      // so the app is fully usable during development
+      print('[MLService] Falling back to mock: $e');
       return _mockResult(cancerType, imageFile.path);
     }
   }
@@ -44,6 +78,7 @@ class MLService {
     final inputTensor = _preprocessImage(imageFile, inputSize);
 
     final outputShape = interpreter.getOutputTensor(0).shape;
+    print('[MLService] Output shape: $outputShape');
     final outputBuffer = List.generate(
       outputShape[0],
       (_) => List.filled(outputShape[1], 0.0),
@@ -57,19 +92,17 @@ class MLService {
       confidences[labels[i]] = rawOutput[i];
     }
 
+    print('[MLService] Inference done: $confidences');
     return _buildResult(cancerType, imageFile.path, confidences);
   }
 
-  /// Mock result used during development when .tflite model isn't downloaded yet
   DetectionResult _mockResult(String cancerType, String imagePath) {
     final labels = AppConstants.labels[cancerType]!;
-    // Distribute mock confidences across labels
     final confidences = <String, double>{};
     for (int i = 0; i < labels.length; i++) {
       confidences[labels[i]] = i == 0 ? 0.72 : (0.28 / (labels.length - 1));
     }
-    return _buildResult(cancerType, imagePath, confidences,
-        isMock: true);
+    return _buildResult(cancerType, imagePath, confidences, isMock: true);
   }
 
   DetectionResult _buildResult(
@@ -80,7 +113,6 @@ class MLService {
   }) {
     final topEntry =
         confidences.entries.reduce((a, b) => a.value > b.value ? a : b);
-
     final riskLevel = _getRiskLevel(cancerType, topEntry.key, topEntry.value);
     final recommendation = isMock
         ? '⚠️ Demo mode — ML model not yet downloaded. Run scripts/download_models.py to enable real inference. ${_getRecommendation(riskLevel, topEntry.key)}'
@@ -103,7 +135,6 @@ class MLService {
     final bytes = imageFile.readAsBytesSync();
     final rawImage = img.decodeImage(bytes)!;
     final resized = img.copyResize(rawImage, width: size, height: size);
-
     return [
       List.generate(
         size,
