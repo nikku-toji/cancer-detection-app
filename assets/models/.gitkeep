@@ -1,0 +1,4 @@
+# Placeholder files so Flutter asset directories are tracked by git
+# Real .tflite model files are excluded via .gitignore
+# Run: python scripts/download_models.py  to download/generate the models
+.gitkeep
