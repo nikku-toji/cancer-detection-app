@@ -3,5 +3,5 @@ uvicorn[standard]>=0.27.0
 python-multipart>=0.0.9
 numpy>=1.24.0
 Pillow>=10.0.0
-tflite-runtime>=2.14.0; platform_system != 'Windows'
-tensorflow>=2.13.0; platform_system == 'Windows'
+# tflite-runtime has no arm64/macOS wheel - tensorflow includes TFLite interpreter
+tensorflow>=2.13.0
