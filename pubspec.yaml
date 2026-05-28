@@ -1,0 +1,64 @@
+name: cancer_detection_app
+description: AI-powered multi-type cancer detection mobile app
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # HTTP & API
+  http: ^1.2.0
+  dio: ^5.4.0
+
+  # Image handling
+  image_picker: ^1.0.7
+  image: ^4.1.7
+  cached_network_image: ^3.3.1
+
+  # ML / TFLite
+  tflite_flutter: ^0.10.4
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # UI
+  flutter_animate: ^4.5.0
+  lottie: ^3.1.0
+  percent_indicator: ^4.2.3
+  fl_chart: ^0.67.0
+  shimmer: ^3.0.0
+  gap: ^3.0.1
+
+  # Storage
+  shared_preferences: ^2.2.3
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.3
+
+  # Permissions
+  permission_handler: ^11.3.1
+
+  # Utils
+  intl: ^0.19.0
+  uuid: ^4.4.0
+  logger: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.9
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/
+    - assets/images/
+    - assets/animations/
+    - assets/sample_data/
