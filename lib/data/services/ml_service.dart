@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:image/image.dart' as img;
 import '../models/detection_result.dart';
@@ -30,24 +29,24 @@ class MLService {
     // Preprocess image
     final inputTensor = _preprocessImage(imageFile, inputSize);
 
-    // Run inference
+    // Prepare output buffer
     final outputShape = interpreter.getOutputTensor(0).shape;
-    final outputBuffer = List.filled(
-      outputShape.reduce((a, b) => a * b),
-      0.0,
-    ).reshape(outputShape);
+    final outputBuffer = List.generate(
+      outputShape[0],
+      (_) => List.filled(outputShape[1], 0.0),
+    );
 
     interpreter.run(inputTensor, outputBuffer);
 
     // Parse output
     final confidences = <String, double>{};
-    final rawOutput = outputBuffer[0] as List<double>;
+    final rawOutput = outputBuffer[0];
     for (int i = 0; i < labels.length && i < rawOutput.length; i++) {
       confidences[labels[i]] = rawOutput[i];
     }
 
-    final topEntry = confidences.entries
-        .reduce((a, b) => a.value > b.value ? a : b);
+    final topEntry =
+        confidences.entries.reduce((a, b) => a.value > b.value ? a : b);
 
     final riskLevel = _getRiskLevel(cancerType, topEntry.key, topEntry.value);
     final recommendation = _getRecommendation(riskLevel, topEntry.key);
@@ -65,22 +64,28 @@ class MLService {
     );
   }
 
-  /// Preprocess image to model input tensor
+  /// Preprocess image to [1, size, size, 3] float32 tensor
+  /// Uses image 4.x API: pixel.r / pixel.g / pixel.b
   List<List<List<List<double>>>> _preprocessImage(File imageFile, int size) {
     final bytes = imageFile.readAsBytesSync();
     final rawImage = img.decodeImage(bytes)!;
     final resized = img.copyResize(rawImage, width: size, height: size);
 
     return [
-      List.generate(size, (y) =>
-        List.generate(size, (x) {
-          final pixel = resized.getPixel(x, y);
-          return [
-            img.getRed(pixel) / 255.0,
-            img.getGreen(pixel) / 255.0,
-            img.getBlue(pixel) / 255.0,
-          ];
-        }),
+      List.generate(
+        size,
+        (y) => List.generate(
+          size,
+          (x) {
+            final pixel = resized.getPixel(x, y);
+            // image ^4.x: access channels via pixel.r / .g / .b (0–255)
+            return [
+              pixel.r / 255.0,
+              pixel.g / 255.0,
+              pixel.b / 255.0,
+            ];
+          },
+        ),
       ),
     ];
   }
