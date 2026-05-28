@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/constants/app_constants.dart';
@@ -9,7 +11,6 @@ import '../../providers/scan_provider.dart';
 
 class ScanScreen extends ConsumerStatefulWidget {
   final String cancerType;
-
   const ScanScreen({super.key, required this.cancerType});
 
   @override
@@ -20,7 +21,32 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   File? _selectedImage;
   final _picker = ImagePicker();
 
-  Future<void> _pickImage(ImageSource source) async {
+  // Detect if we're on desktop (macOS/Windows/Linux)
+  bool get _isDesktop =>
+      !kIsWeb &&
+      (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+
+  /// Pick image: use file_selector on desktop, image_picker on mobile
+  Future<void> _pickImage([ImageSource source = ImageSource.gallery]) async {
+    if (_isDesktop) {
+      await _pickImageDesktop();
+    } else {
+      await _pickImageMobile(source);
+    }
+  }
+
+  Future<void> _pickImageDesktop() async {
+    const typeGroup = XTypeGroup(
+      label: 'Images',
+      extensions: ['jpg', 'jpeg', 'png', 'bmp', 'tiff'],
+    );
+    final file = await openFile(acceptedTypeGroups: [typeGroup]);
+    if (file != null) {
+      setState(() => _selectedImage = File(file.path));
+    }
+  }
+
+  Future<void> _pickImageMobile(ImageSource source) async {
     final picked = await _picker.pickImage(
       source: source,
       imageQuality: 95,
@@ -55,15 +81,16 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Image preview
+            // Image preview area
             Expanded(
               child: GestureDetector(
-                onTap: () => _showPickerDialog(),
+                onTap: isLoading ? null : () => _pickImage(),
                 child: Container(
                   decoration: BoxDecoration(
                     color: Colors.grey[100],
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.grey[300]!, width: 2),
+                    border:
+                        Border.all(color: Colors.grey[300]!, width: 2),
                   ),
                   child: _selectedImage != null
                       ? ClipRRect(
@@ -83,16 +110,25 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'Tap to select image',
-                              style: TextStyle(color: Colors.grey[500], fontSize: 16),
+                              _isDesktop
+                                  ? 'Click to browse image file'
+                                  : 'Tap to select image',
+                              style: TextStyle(
+                                  color: Colors.grey[500], fontSize: 16),
                             ),
                             const SizedBox(height: 8),
-                            Text(
-                              AppConstants.cancerDescriptions[widget.cancerType]!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 32),
+                              child: Text(
+                                AppConstants
+                                    .cancerDescriptions[widget.cancerType]!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.grey[400], fontSize: 12),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                         ).animate().fadeIn(),
@@ -101,31 +137,45 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: isLoading ? null : () => _pickImage(ImageSource.camera),
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('Camera'),
+            // Action buttons — camera only shown on mobile
+            if (!_isDesktop)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: isLoading
+                          ? null
+                          : () => _pickImage(ImageSource.camera),
+                      icon: const Icon(Icons.camera_alt),
+                      label: const Text('Camera'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: isLoading ? null : () => _pickImage(ImageSource.gallery),
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('Gallery'),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: isLoading
+                          ? null
+                          : () => _pickImage(ImageSource.gallery),
+                      icon: const Icon(Icons.photo_library),
+                      label: const Text('Gallery'),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+
+            if (_isDesktop)
+              OutlinedButton.icon(
+                onPressed: isLoading ? null : () => _pickImage(),
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Browse Image File'),
+              ),
+
             const SizedBox(height: 12),
 
             // Analyze button
             FilledButton.icon(
-              onPressed: (_selectedImage != null && !isLoading) ? _runAnalysis : null,
+              onPressed:
+                  (_selectedImage != null && !isLoading) ? _runAnalysis : null,
               icon: isLoading
                   ? const SizedBox(
                       width: 18,
@@ -149,41 +199,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                 ),
               ),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _showPickerDialog() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Take Photo'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Choose from Gallery'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.gallery);
-                },
-              ),
-            ],
-          ),
         ),
       ),
     );

@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  static const _primaryColor = Color(0xFF1565C0); // Deep medical blue
-  static const _accentColor = Color(0xFF00ACC1);  // Teal accent
+  static const _primaryColor = Color(0xFF1565C0);
+  static const _accentColor = Color(0xFF00ACC1);
   static const _errorColor = Color(0xFFD32F2F);
   static const _warningColor = Color(0xFFF57C00);
   static const _successColor = Color(0xFF388E3C);
 
+  // Use system font — avoids macOS sandbox network block that google_fonts triggers
   static ThemeData get lightTheme => ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
           seedColor: _primaryColor,
           brightness: Brightness.light,
         ),
-        textTheme: GoogleFonts.interTextTheme(),
         appBarTheme: const AppBarTheme(
           backgroundColor: _primaryColor,
           foregroundColor: Colors.white,
@@ -53,7 +52,6 @@ class AppTheme {
           seedColor: _primaryColor,
           brightness: Brightness.dark,
         ),
-        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
       );
 }
 
@@ -72,14 +70,14 @@ class AppColors extends ThemeExtension<AppColors> {
   });
 
   @override
-  AppColors copyWith({Color? accent, Color? error, Color? warning, Color? success}) {
-    return AppColors(
-      accent: accent ?? this.accent,
-      error: error ?? this.error,
-      warning: warning ?? this.warning,
-      success: success ?? this.success,
-    );
-  }
+  AppColors copyWith(
+          {Color? accent, Color? error, Color? warning, Color? success}) =>
+      AppColors(
+        accent: accent ?? this.accent,
+        error: error ?? this.error,
+        warning: warning ?? this.warning,
+        success: success ?? this.success,
+      );
 
   @override
   AppColors lerp(AppColors? other, double t) {

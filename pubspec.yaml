@@ -18,19 +18,19 @@ dependencies:
   http: ^1.2.0
   dio: ^5.4.0
 
-  # Image handling
+  # Image handling — image_picker for mobile, file_selector for desktop
   image_picker: ^1.0.7
+  file_selector: ^1.0.3
   image: ^4.1.7
   cached_network_image: ^3.3.1
 
-  # ML / TFLite (latest stable)
+  # ML / TFLite
   tflite_flutter: ^0.11.0
 
   # State management
   flutter_riverpod: ^2.5.1
 
-  # UI
-  google_fonts: ^6.2.1
+  # UI — google_fonts removed; use system font to avoid macOS sandbox network block
   flutter_animate: ^4.5.0
   lottie: ^3.1.0
   percent_indicator: ^4.2.3
